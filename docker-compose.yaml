@@ -56,6 +56,10 @@ services:
     environment:
       - TOPOLOGY_FILE=/etc/load-generator.json
       - JAEGER_COLLECTOR_URL=http://tempo:14268
+    logging:
+      driver: loki
+      options:
+        loki-url: 'http://localhost:3100/api/prom/push'
   grafana:
     image: grafana/grafana:7.3.6
     volumes:
