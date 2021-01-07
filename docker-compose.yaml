@@ -2,21 +2,16 @@ version: "3"
 services:
   tempo:
     image: grafana/tempo:latest
-    command: 
-      - "-storage.trace.backend=local"                  # tell tempo where to permanently put traces
-      - "-storage.trace.local.path=/tmp/tempo/traces"   
-      - "-storage.trace.wal.path=/tmp/tempo/wal"        # tell tempo where to store the wal
-      - "-auth.enabled=false"                           # disables the requirement for the X-Scope-OrgID header
-      - "-server.http-listen-port=3100" 
+    command: -config.file=/etc/tempo.yaml
     volumes:
-      - ./example-data/tempo:/tmp/tempo
+    - ./etc/tempo.yaml:/etc/tempo.yaml
     ports:
-      - "14268"  # jaeger ingest
+      - "14268:14268"  # jaeger ingest
+      - "3300:3300"
     logging:
       driver: loki
       options:
         loki-url: 'http://localhost:3100/api/prom/push'
-
   tempo-query:
     image: grafana/tempo-query:latest
     command: ["--grpc-storage-plugin.configuration-file=/etc/tempo-query.yaml"]
@@ -28,23 +23,35 @@ services:
       driver: loki
       options:
         loki-url: 'http://localhost:3100/api/prom/push'
-  minio:
-    image: minio/minio
-    environment:
-      - MINIO_ACCESS_KEY=tempo
-      - MINIO_SECRET_KEY=supersecret
-    command:  minio server /data
-    ports:
-      - "9000:9000"
-  prometheus:
-    image: prom/prometheus:latest
+  otel-collector:
+    image: otel/opentelemetry-collector-dev:latest
     volumes:
-      - ./etc/prometheus.yaml:/etc/prometheus.yaml
-    entrypoint:
-      - /bin/prometheus
-      - --config.file=/etc/prometheus.yaml
+    - ./etc/otel-collector-config.yaml:/etc/otel-collector/config.yaml
+    command: --config=/etc/otel-collector/config.yaml
+    logging:
+      driver: loki
+      options:
+        loki-url: 'http://localhost:3100/api/prom/push'
+  grafana-agent:
+    image: grafana/agent:v0.9.1
+    volumes:
+      - ./etc/agent2.yaml:/etc/agent-config/agent.yaml
+    command:  -config.file=/etc/agent-config/agent.yaml   --prometheus.wal-directory=/tmp/agent/wal
     ports:
-      - "9090:9090"
+      -  "12345:12345"
+    logging:
+      driver: loki
+      options:
+        loki-url: 'http://localhost:3100/api/prom/push'
+  victoriametrics:
+    image: victoriametrics/victoria-metrics
+    volumes:
+      - ./example-data/victoriametrics:/victoriametrics
+    ports:
+      - "8428:8428"
+    command: 
+      - '-storageDataPath=/victoriametrics'
+      - '-retentionPeriod=1'
     logging:
       driver: loki
       options:
@@ -55,7 +62,7 @@ services:
       - ./etc/load-generator.json:/etc/load-generator.json
     environment:
       - TOPOLOGY_FILE=/etc/load-generator.json
-      - JAEGER_COLLECTOR_URL=http://tempo:14268
+      - JAEGER_COLLECTOR_URL=http://grafana-agent:14268
     logging:
       driver: loki
       options:

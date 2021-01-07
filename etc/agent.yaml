@@ -1,0 +1,41 @@
+server:
+  log_level: debug
+  http_listen_port: 12345
+prometheus:
+  wal_directory: /tmp/agent
+  global:
+    scrape_interval: 5s
+  configs:
+    - name: test
+      host_filter: false
+      scrape_configs:
+        - job_name: victoriametrics
+          static_configs:
+            - targets: ['victoriametrics:8428']
+              labels:
+                cluster: 'victoriametrics'
+                container: 'victoriametrics'
+        - job_name: tempo
+          static_configs:
+            - targets: ['tempo:3100']
+              labels:
+                cluster: 'tempo'
+                container: 'tempo'
+      remote_write:
+        - url: http://victoriametrics:8428/api/v1/write
+tempo:
+  receivers:
+    jaeger:
+      protocols:
+        thrift_http: 
+  attributes:
+    actions:
+    - action: upsert
+      key: env
+      value: prod
+  push_config:
+    endpoint: otel-collector:55680
+    insecure: true
+    batch:
+      timeout: 5s
+      send_batch_size: 100

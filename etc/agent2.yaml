@@ -1,0 +1,52 @@
+server:
+  log_level: debug
+  http_listen_port: 12345
+prometheus:
+  global:
+    scrape_interval: 5s
+  configs:
+    - name: default
+      scrape_configs:
+        - job_name: agent
+          static_configs:
+            - targets: ['127.0.0.1:12345']
+        - job_name: victoriametrics
+          static_configs:
+            - targets: ['victoriametrics:8428']
+        - job_name: tempo
+          static_configs:
+            - targets: ['tempo:3300']
+              labels:
+                cluster: 'tempo'
+                container: 'tempo'
+      remote_write:
+        - url: http://victoriametrics:8428/api/v1/write
+loki:
+  positions:
+    filename: /tmp/positions.yaml
+  scrape_configs:
+    - job_name: varlogs
+      static_configs:
+        - targets: [localhost]
+          labels:
+            job: varlogs
+            __path__: /var/log/*log
+  clients:
+    - url: http://loki:3100/loki/api/v1/push
+
+tempo:
+  receivers:
+    jaeger:
+      protocols:
+        thrift_http: 
+  attributes:
+    actions:
+    - action: upsert
+      key: env
+      value: prod
+  push_config:
+    endpoint: otel-collector:55680
+    insecure: true
+    batch:
+      timeout: 5s
+      send_batch_size: 100
